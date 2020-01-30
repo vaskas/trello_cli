@@ -46,6 +46,8 @@ elif [ "$1" = "boards" ];then shift ##
 &filter=open\
 &lists=open\
 &fields=all\
+&members=all\
+&member_fields=initials,username\
 &list_fields=all\
 "  > ${trello_cache_dir}/boards.json
   fi
@@ -60,7 +62,7 @@ elif [ "$1" = "board" ];then shift ##
       --arg board_id "${board_id}" \
       'map(select(.id==$board_id))|first'
     )"
- 
+
 elif [ "$1" = "board_match_to_id" ];then shift ##
   board_pattern=$1; shift
   matched_id="$(
@@ -118,15 +120,23 @@ elif [ "$1" = "list_lists" ];then shift
 | .formatted+=[ \"\\n\" ] \
 )|\
 map(.formatted)|flatten|.[]\
-" 
+"
       )"
 
 elif [ "$1" = "board_list_map" ];then shift ## used by trellowarrior
   board_pattern=$1; shift
-  output="$( 
+  output="$(
     $0 board ${board_pattern} \
       | jq -c '.lists|map({id,name})'
     )"
+
+elif [ "$1" = "board_members" ];then shift ## used by trellowarrior
+  board_pattern=$1; shift
+  output="$(
+    $0 board ${board_pattern} \
+      | jq -c '.members'
+    )"
+
 
 elif [ "$1" = "list_name_map" ];then shift ## used by trellowarrior
   output="$($0 boards | jq -c 'map(.id as $board_id|.lists|map({id,name,board_id:$board_id}))|flatten')"
@@ -228,6 +238,11 @@ elif [ "$1" = "card" ];then shift ##
 &customFieldItems=true\
 ")"
 
+elif [ "$1" = "plugin_data" ];then shift ##
+  card_id="$1"; shift
+  output="$(curl -s "https://trello.com/1/cards/${card_id}/pluginData?key=${trello_key}&token=${trello_token}\
+")"
+
 elif [ "$1" = "my_cards" ];then shift ##
   # : ${card_fields:="due,name,shortLink,shortUrl,idBoard,idList,closed,dateLastActivity"}
   : ${card_fields:="all"}
@@ -287,7 +302,7 @@ elif [ "$1" = "update_card_from_json" ];then shift ##
     exit 1
   fi
 
-  rate_limit_remaining="$( 
+  rate_limit_remaining="$(
     echo "${headers}" \
     | grep -i "^x-rate-limit-api-token-remaining: [0-9]*" \
     | awk -F':' '{print $2}' \
@@ -298,27 +313,27 @@ elif [ "$1" = "update_card_from_json" ];then shift ##
   echo "rate_limit update card ${card_id}: ${rate_limit_remaining}"
   if [[ "${rate_limit_remaining}" -lt "${limit}" ]];then
     echo "rate limit is (${rate_limit_remaining}) below ${limit} wait ${wait_time}"
-    sleep ${wait_time} 
+    sleep ${wait_time}
   fi
-  rate_limit_remaining="$( 
+  rate_limit_remaining="$(
     $0 card_tags ${board} ${card_id} "${tags}"
     )"
   echo "rate_limit tags ${card_id}: ${rate_limit_remaining}"
   if [[ "${rate_limit_remaining}" -lt "${limit}" ]];then
     echo "rate limit is (${rate_limit_remaining}) below ${limit} wait ${wait_time}"
-    sleep ${wait_time} 
+    sleep ${wait_time}
   fi
-  rate_limit_remaining="$( 
+  rate_limit_remaining="$(
     $0 card_prio ${board} ${card_id} "${priority}"
     )"
   echo "rate_limit prio ${card_id}: ${rate_limit_remaining}"
   if [[ ${rate_limit_remaining} -lt ${limit} ]];then
     echo "rate limit is (${rate_limit_remaining}) below ${limit} wait ${wait_time}"
-    sleep ${wait_time} 
+    sleep ${wait_time}
   fi
 
 elif [ "$1" = "check_rate" ];then shift
-  rate_limit_remaining="$( 
+  rate_limit_remaining="$(
     curl -i -s "https://trello.com/1/members/${member}/initials?key=${trello_key}&token=${trello_token}" \
       | grep -i "^x-rate-limit-api-token-remaining: [0-9]*" \
       | awk -F':' '{print $2}' \
@@ -431,8 +446,8 @@ elif [ "$1" = "custom_field_info" ];then shift ##
   custom_field_id="$1"; shift
   output="$(
     curl -s \
-      "https://trello.com/1/customFields/${custom_field_id}?key=${trello_key}&token=${trello_token}" 
-    )"
+      "https://trello.com/1/customFields/${custom_field_id}?key=${trello_key}&token=${trello_token}"
+-    )"
 
 elif [ "$1" = "card_checklists" ];then shift ##
   card_id="$1"; shift
@@ -454,7 +469,7 @@ elif [ "$1" = "card_checklists_raw" ];then shift ##
 &checkItems=all\
 &checkItem_fields=all\
 &fields=all\
-" 
+"
     )"
 
 elif [ "$1" = "card_checklists_get_id" ];then shift ##
@@ -495,11 +510,11 @@ elif [ "$1" = "card_checklist_update_item" ];then shift ##
       -XPUT \
       --data-urlencode "name=${name}" \
       --data-urlencode "state=complete" \
-      "https://trello.com/1/cards/${card_id}/checkItem/${item_id}?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/cards/${card_id}/checkItem/${item_id}?key=${trello_key}&token=${trello_token}"
     )"
 
-      # "https://trello.com/1/checklists/${list_id}/checkItems/${item_id}?key=${trello_key}&token=${trello_token}" 
-      # "https://trello.com/1/cards/${card_id}/checkItem/${item_id}?key=${trello_key}&token=${trello_token}" 
+      # "https://trello.com/1/checklists/${list_id}/checkItems/${item_id}?key=${trello_key}&token=${trello_token}"
+      # "https://trello.com/1/cards/${card_id}/checkItem/${item_id}?key=${trello_key}&token=${trello_token}"
 
 elif [ "$1" = "card_checklist_del_item" ];then shift ##
   list_id="$1"; shift
@@ -507,14 +522,14 @@ elif [ "$1" = "card_checklist_del_item" ];then shift ##
   output="$(
     curl -s \
       -XDELETE \
-      "https://trello.com/1/checklists/${list_id}/checkItems/${item_id}?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/checklists/${list_id}/checkItems/${item_id}?key=${trello_key}&token=${trello_token}"
     )"
 
 elif [ "$1" = "checklist_info" ];then shift ##
   list_id="$1"; shift
   output="$(
     curl -s \
-      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}"
     )"
 
 elif [ "$1" = "card_checklist_add_list" ];then shift ##
@@ -541,7 +556,7 @@ elif [ "$1" = "card_checklist_add_item" ];then shift ##
       --data-urlencode "name=${name}" \
       --data-urlencode "pos=${pos}" \
       --data-urlencode "checked=${checked}" \
-      "https://trello.com/1/checklists/${list_id}/checkItems?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/checklists/${list_id}/checkItems?key=${trello_key}&token=${trello_token}"
     )"
 
 elif [ "$1" = "card_checklist_update_list" ];then shift ##
@@ -552,7 +567,7 @@ elif [ "$1" = "card_checklist_update_list" ];then shift ##
     curl -s \
       -XPUT \
       --data-urlencode "name=${name}" \
-      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}"
     )"
 
 elif [ "$1" = "card_checklist_del_list" ];then shift ##
@@ -560,7 +575,7 @@ elif [ "$1" = "card_checklist_del_list" ];then shift ##
   output="$(
     curl -s \
       -XDELETE \
-      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}" 
+      "https://trello.com/1/checklists/${list_id}?key=${trello_key}&token=${trello_token}"
     )"
 
 elif [ "$1" = "card_add" ];then shift ##
@@ -663,7 +678,7 @@ elif [[ "$1" == "search" ]];then shift
 
 
   : ${limit:="100"}
-  : ${fields:="idBoard,idList,shortLink,shortUrl,closed,dateLastActivity,name,desc,badges"}
+  : ${fields:="idBoard,idList,idMembers,closed,idChecklists,shortLink,shortUrl,closed,dateLastActivity,name,desc,badges"}
   : ${type:="cards"} #lists
   # idBoards mine or a comma-separated list of board ids
 
